@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>نشاط كلمات | الصف السادس</title>
+<title>مبادرة I'm the Princess</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -112,6 +112,27 @@ button.secondary{
 .toast strong{display:block}
 .smallKpi{display:flex;gap:10px;flex-wrap:wrap}
 .smallKpi>div{padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.78);border:1px solid rgba(0,0,0,.08)}
+
+/* Help box (toggle) */
+.helpBox{
+  margin-top:12px;
+  padding:14px 14px;
+  border-radius:18px;
+  background:rgba(255,255,255,.92);
+  border:1px solid rgba(0,0,0,.10);
+  box-shadow:0 16px 55px rgba(2,6,23,.10);
+  line-height:1.9;
+  font-weight:900;
+}
+.helpTitle{
+  font-size:16px;
+  font-weight:1000;
+  margin-bottom:8px;
+  color:var(--accent);
+}
+.helpBox ol{margin:0;padding-right:18px}
+.helpBox li{margin:6px 0}
+
 </style>
 </head>
 <body>
@@ -141,10 +162,24 @@ button.secondary{
             </div>
             <div class="btnRow">
               <button id="btnEnter" type="button">الدخول</button>
+              <button id="btnHelp" type="button" class="secondary">تعليمات</button>
               <button class="secondary" id="btnReset" type="button">تصفير</button>
             </div>
           </div>
-        </div>
+        
+            <div id="helpBox" class="helpBox" style="display:none">
+              <div class="helpTitle">تعليمات</div>
+              <ol>
+                <li>اكتب <b>اسم المدرسة</b> و<b>اسم الطالب/ة</b> ثم اضغط <b>الدخول</b>.</li>
+                <li>المبادرة 5 مستويات، كل مستوى 10 كلمات من الملف.</li>
+                <li>كل مستوى جزئين: <b>اختيار من متعدد</b> (10) ثم <b>كتابة</b> (10).</li>
+                <li>شرط الانتقال: <b>10/10</b> في الجزء الحالي.</li>
+                <li>عند إعادة الاختبار يتغيّر ترتيب الأسئلة والخيارات تلقائيًا.</li>
+                <li>بعد إنهاء المستوى يظهر زر <b>تصدير PDF</b> لتقرير الإجابات والدرجة.</li>
+              </ol>
+            </div>
+
+</div>
       </div>
     </div>
   </section>
@@ -622,6 +657,16 @@ button.secondary{
     $('studentName').value = state.studentName || "";
 
     $('btnEnter').addEventListener('click', enterApp);
+
+    // تعليمات (إظهار/إخفاء)
+    const btnHelp = $('btnHelp');
+    const helpBox = $('helpBox');
+    if (btnHelp && helpBox) {
+      btnHelp.addEventListener('click', () => {
+        helpBox.style.display = (helpBox.style.display === 'block') ? 'none' : 'block';
+      });
+    }
+
     $('btnReset').addEventListener('click', resetAll);
     $('btnExit').addEventListener('click', () => show('view-cover'));
     $('btnBack').addEventListener('click', () => show('view-cover'));
