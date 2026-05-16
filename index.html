@@ -89,7 +89,7 @@ button{border:0;cursor:pointer;padding:12px 16px;border-radius:16px;font-weight:
           </div>
 
           <div class="smallNote">
-            أ/ سارة النهدي — معلمة اللغة الإنجليزية<br>
+            أ/ سارة النهدي — معلمة اللغة الإنجليزية &nbsp;&nbsp;|&nbsp;&nbsp; مديرة المدرسة أ/ ليلي الحبشي<br>
             <span id="attemptLabel" style="opacity:.9">محاولة رقم: 1</span>
           </div>
         </div>
@@ -198,7 +198,7 @@ button{border:0;cursor:pointer;padding:12px 16px;border-radius:16px;font-weight:
           <button class="secondary" id="btnExportAll" type="button">تصدير PDF (الورقة الرسمية)</button>
         </div>
 
-        <div class="smallNote">أ/ سارة النهدي — معلمة اللغة الإنجليزية</div>
+        <div class="smallNote">أ/ سارة النهدي — معلمة اللغة الإنجليزية &nbsp;&nbsp;|&nbsp;&nbsp; مديرة المدرسة أ/ ليلي الحبشي</div>
       </div>
     </div>
   </div>
@@ -209,6 +209,122 @@ button{border:0;cursor:pointer;padding:12px 16px;border-radius:16px;font-weight:
 
 <script>
 'use strict';
+
+const PDF_PHRASES = {
+  "tidy up": "I can tidy up.",
+  "clear the table": "I can clear the table.",
+  "vacuum the carpet": "I can vacuum the carpet.",
+  "dust the furniture": "I can dust the furniture.",
+  "sweep the floor": "I can sweep the floor.",
+  "clean the windows": "I can clean the windows.",
+  "empty the bin": "I can empty the bin.",
+  "put away the clothes": "I can put away the clothes.",
+  "wash the car": "I can wash the car.",
+  "cook the dinner": "I can cook the dinner.",
+
+  "clothes": "I can wear clothes.",
+  "plain": "I can wear plain clothes.",
+  "patterned": "I can wear patterned clothes.",
+  "spotted": "I can wear spotted clothes.",
+  "striped": "I can wear striped clothes.",
+  "comfortable": "I can wear comfortable clothes.",
+  "baggy": "I can wear baggy clothes.",
+  "colourful": "I can wear colourful clothes.",
+  "woolly hat": "I can wear a woolly hat.",
+  "gloves": "I can wear gloves.",
+  "casual": "I like casual clothes.",
+  "smart": "I wear smart clothes.",
+  "formal": "I wear formal clothes.",
+  "checked": "I wear checked clothes.",
+  "accessories": "I wear accessories.",
+  "sweatshirt": "I wear a sweatshirt.",
+  "scarf": "I wear a scarf.",
+  "earrings": "I wear earrings.",
+  "boring": "This film is boring.",
+  "cheap": "These clothes are cheap.",
+
+  "adventure": "We have an adventure.",
+  "outdoor": "This is an outdoor activity.",
+  "equipment": "I need equipment.",
+  "bandage": "I need a bandage.",
+  "penknife": "I need a penknife.",
+  "compass": "I need a compass.",
+  "first-aid kit": "I need a first-aid kit.",
+  "camping stove": "I need a camping stove.",
+  "shelter": "I need a shelter.",
+  "rope": "I need a rope.",
+  "matches": "I use matches.",
+  "sleeping mat": "I use a sleeping mat.",
+  "plaster": "I use a plaster.",
+  "rucksack": "I carry a rucksack.",
+  "blanket": "I use a blanket.",
+  "injuries": "I can treat injuries.",
+  "illness": "I get ill.",
+  "accident": "I have an accident.",
+  "emergency": "I can help in emergencies.",
+  "have a pain": "I feel pain."
+};
+const PDF_AR_SENTENCES = {
+  "tidy up": "أستطيع الترتيب",
+  "clear the table": "أستطيع تنظيف الطاولة",
+  "vacuum the carpet": "أستطيع تنظيف السجاد بالمكنسة الكهربائية",
+  "dust the furniture": "أستطيع إزالة الغبار من الأثاث",
+  "sweep the floor": "أستطيع كنس الأرضية",
+  "clean the windows": "أستطيع تنظيف النوافذ",
+  "empty the bin": "أستطيع إفراغ سلة المهملات",
+  "put away the clothes": "أستطيع وضع الملابس في مكانها",
+  "wash the car": "أستطيع غسيل السيارة",
+  "cook the dinner": "أستطيع طهي العشاء",
+
+  "clothes": "أستطيع ارتداء الملابس",
+  "plain": "أستطيع ارتداء ملابس عادية",
+  "patterned": "أستطيع ارتداء ملابس منقوشة",
+  "spotted": "أستطيع ارتداء ملابس منقطة",
+  "striped": "أستطيع ارتداء ملابس مخططة",
+  "comfortable": "أستطيع ارتداء ملابس مريحة",
+  "baggy": "أستطيع ارتداء ملابس فضفاضة",
+  "colourful": "أستطيع ارتداء ملابس ملونة",
+  "woolly hat": "أستطيع ارتداء قبعة صوف",
+  "gloves": "أستطيع ارتداء قفازات",
+  "casual": "أنا أحب الملابس غير الرسمية",
+  "smart": "أنا أرتدي ملابس ذكية",
+  "formal": "أنا أرتدي ملابس رسمية",
+  "checked": "أنا أرتدي ملابس منقوشة مربعات",
+  "accessories": "أنا أرتدي اكسسوارات",
+  "sweatshirt": "أنا أرتدي قميصًا ثقيلًا",
+  "scarf": "أنا أرتدي وشاحًا",
+  "earrings": "أنا أرتدي أقراطًا",
+  "boring": "هذا الفيلم ممل",
+  "cheap": "هذه الملابس رخيصة",
+
+  "adventure": "نحن لدينا مغامرة",
+  "outdoor": "هذا نشاط خارجي",
+  "equipment": "أنا أحتاج لمعدات",
+  "bandage": "أنا أحتاج لضمادة",
+  "penknife": "أنا أحتاج لسكين صغيرة",
+  "compass": "أنا أحتاج لبوصلة",
+  "first-aid kit": "أنا أحتاج لصندوق الإسعافات الأولية",
+  "camping stove": "أنا أحتاج لموقد تخييم",
+  "shelter": "أنا أحتاج لمأوى",
+  "rope": "أنا أحتاج لحبل",
+  "matches": "أنا أستخدم أعواد كبريت",
+  "sleeping mat": "أنا أستخدم حصيرة نوم",
+  "plaster": "أنا أستخدم لاصقة الجرح",
+  "rucksack": "أنا أحمل حقيبة ظهر",
+  "blanket": "أنا أستخدم بطانية",
+  "injuries": "أنا أعالج الإصابات",
+  "illness": "أنا أمرض",
+  "accident": "أنا أتعرض لحادث",
+  "emergency": "أنا أساعد في حالات الطوارئ",
+  "have a pain": "أنا أشعر بألم"
+};
+function pdfPhrase(word){
+  return PDF_PHRASES[word] || `I need a ${word}.`;
+}
+function pdfArabicSentence(word, fallback){
+  return PDF_AR_SENTENCES[word] || fallback || word;
+}
+
 const WORDS = {"unit4": [["tidy up", "الترتيب"], ["clear the table", "تنظيف الطاولة"], ["vacuum the carpet", "تنظيف السجاد بالمكنسة الكهربائية"], ["dust the furniture", "إزالة الغبار من الأثاث"], ["sweep the floor", "كنس الأرضية"], ["clean the windows", "تنظيف النوافذ"], ["empty the bin", "إفراغ سلة المهملات"], ["put away the clothes", "وضع الملابس في مكانها"], ["wash the car", "غسيل السيارة"], ["cook the dinner", "طهي العشاء"]], "unit5": [["clothes", "ملابس"], ["plain", "عادي/بدون زخرفة"], ["patterned", "منقوشة"], ["spotted", "منقطة"], ["striped", "مخطط"], ["comfortable", "مريح"], ["baggy", "فضفاض"], ["colourful", "ملون"], ["woolly hat", "قبعة صوف"], ["gloves", "قفازات"], ["casual", "ملابس غير رسمية"], ["smart", "ذكي"], ["formal", "رسمي"], ["checked", "منقوش مربعات"], ["accessories", "اكسسوارات"], ["sweatshirt", "قميص ثقيل"], ["scarf", "وشاح"], ["earrings", "أقراط تُلبس في الأذن"], ["boring", "ممل"], ["cheap", "رخيص"]], "unit6": [["adventure", "مغامرة"], ["outdoor", "خارجي"], ["equipment", "معدات"], ["bandage", "ضمادة"], ["penknife", "سكين صغيرة"], ["compass", "بوصلة"], ["first-aid kit", "صندوق الإسعافات الأولية"], ["camping stove", "موقد تخييم"], ["shelter", "مأوى"], ["rope", "حبل"], ["matches", "أعواد كبريت"], ["sleeping mat", "حصيرة نوم"], ["plaster", "لاصقة الجرح"], ["rucksack", "حقيبة ظهر"], ["blanket", "بطانية"], ["injuries", "إصابات"], ["illness", "مرض"], ["accident", "حادث"], ["emergency", "الطوارئ"], ["have a pain", "شعور بألم"]]};
 const $ = (id)=>document.getElementById(id);
 
@@ -305,40 +421,11 @@ function buildLevel3Questions(){
   });
 
   const sentenceTemplates=(word)=>{
-    const w=word.toLowerCase();
-    if(w==='adventure') return 'We have an adventure.';
-    if(w==='camping stove') return 'I need a camping stove.';
-    if(w==='have a pain') return 'I feel pain.';
-    if(w==='accident') return 'I have an accident.';
-    if(w==='illness') return 'I get ill.';
-    if(w==='injuries') return 'I can treat injuries.';
-    if(w==='emergency') return 'I can help in emergencies.';
-    return `I need a ${word}.`;
+    return pdfPhrase(word);
   };
 
   const arabicSentenceTemplates=(word)=>{
-    const w=word.toLowerCase();
-    if(w==='adventure') return 'نحن لدينا مغامرة';
-    if(w==='outdoor') return 'هذا نشاط خارجي';
-    if(w==='equipment') return 'انا احتاج لمعدات';
-    if(w==='bandage') return 'انا احتاج لضمادة';
-    if(w==='penknife') return 'انا احتاج لسكين صغيرة';
-    if(w==='compass') return 'انا احتاج لبوصلة';
-    if(w==='first-aid kit') return 'انا احتاج لصندوق الإسعافات الأولية';
-    if(w==='camping stove') return 'انا احتاج لموقد تخييم';
-    if(w==='shelter') return 'انا احتاج لمأوى';
-    if(w==='rope') return 'انا احتاج لحبل';
-    if(w==='matches') return 'انا استخدم أعواد كبريت';
-    if(w==='sleeping mat') return 'انا استخدم حصيرة نوم';
-    if(w==='plaster') return 'انا استخدم لاصقة الجرح';
-    if(w==='rucksack') return 'انا أحمل حقيبة ظهر';
-    if(w==='blanket') return 'انا استخدم بطانية';
-    if(w==='injuries') return 'انا أعالج الإصابات';
-    if(w==='illness') return 'انا أمرض';
-    if(w==='accident') return 'انا تعرضت لحادث';
-    if(w==='emergency') return 'انا أساعد في حالات الطوارئ';
-    if(w==='have a pain') return 'انا أشعر بألم';
-    return ar;
+    return pdfArabicSentence(word, word);
   };
 
   const sentQs=sentPairs.map(([en,ar])=>{
@@ -346,7 +433,7 @@ function buildLevel3Questions(){
     const tokens=sentence.replace(/\s+/g,' ').trim().split(' ');
     const arSentence=arabicSentenceTemplates(en);
     return {type:'order-sentence', prompt:arSentence, answer:sentence, tokens:shuffle(tokens),
-      display:`رتّب كلمات الجملة الإنجليزية للجملة: <b>${esc(arSentence)}</b>`};
+      display:`رتّب كلمات الجملة الإنجليزية المطابقة للجملة: <b>${esc(arSentence)}</b>`};
   });
 
   return [...ordQs,...sentQs];
@@ -582,7 +669,7 @@ function exportPDF(mode,lvl){
   ${makeHeaderHTML(titleLine)}
   <table><thead><tr><th style="width:48px;text-align:center">#</th><th style="width:110px">النوع</th><th>السؤال</th><th style="width:180px">إجابة الطالب/ة</th><th style="width:70px;text-align:center">الحالة</th></tr></thead>
   <tbody>${rowsHtml}</tbody></table>
-  <div class="footer">أ/ سارة النهدي — معلمة اللغة الإنجليزية</div>
+  <div class="footer">أ/ سارة النهدي — معلمة اللغة الإنجليزية &nbsp;&nbsp;|&nbsp;&nbsp; مديرة المدرسة أ/ ليلي الحبشي</div>
   
 <div id="answersModal" class="hidden" style="position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:16px">
   <div style="width:min(760px,96vw);max-height:82vh;overflow:auto;background:#fff;border-radius:18px;border:1px solid rgba(2,6,23,.12);box-shadow:0 24px 80px rgba(2,6,23,.25);padding:14px 14px 10px">
