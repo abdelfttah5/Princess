@@ -525,6 +525,7 @@ function setAttempt(n){ localStorage.setItem('princess_attempt', String(n)); }
 
 const state={
   schoolName:'', studentName:'',
+  firebaseKey:null, resultId:null, _savedFinalResult:false,
   answerLocked:false,
   startTime:null, endTime:null, elapsedMs:0,
   level:1, qIndex:0, score:0,
@@ -609,9 +610,14 @@ function enterApp(){
   const student=$('studentName').value.trim();
   if(!school||!student) return showToast('اكتب اسم المدرسة واسم الطالب/ة','bad');
   state.schoolName=school; state.studentName=student;
+  state.firebaseKey=null; state.resultId=null; state._savedFinalResult=false;
   state.startTime=null; state.endTime=null; state.elapsedMs=0;
   // reset results
   state.results={1:{score:0,max:10,rows:[]},2:{score:0,max:10,rows:[]},3:{score:0,max:10,rows:[]}};
+  saveProgressToFirebase('started').then((ok)=>{
+    if(ok) showToast('تم تسجيل بداية المحاولة في Firebase','ok');
+    else showToast('لم يتم الاتصال بـ Firebase — سيتم الحفظ عند نهاية المستوى','bad');
+  });
   startLevel(1);
 }
 
@@ -743,6 +749,11 @@ function showLevelResult(){
   });
 
   $('btnExportLevel2').onclick=()=>exportPDF('level', state.level);
+
+  // حفظ/تحديث النتيجة بعد كل مستوى حتى لو خرج الطالب من الهاتف
+  saveProgressToFirebase('level-'+state.level).then((ok)=>{
+    if(ok) showToast('تم تحديث النتيجة في Firebase','ok');
+  });
 
   // حفظ النتيجة فور انتهاء المستوى الثالث حتى لو لم يضغط المستخدم زر التالي
   if(state.level===3){ saveCurrentResult(); }
@@ -897,15 +908,16 @@ function saveAllResults(list){
 }
 
 
-function saveCurrentResultManual(){
+
+function buildResultRecord(status){
   const s1 = state.results[1].score || 0;
   const s2 = state.results[2].score || 0;
   const s3 = state.results[3].score || 0;
   const total = s1 + s2 + s3;
-  if(state.startTime!=null){ state.elapsedMs = getElapsedMs(); }
+  const elapsed = state.startTime ? getElapsedMs() : (state.elapsedMs || 0);
 
-  const record = {
-    id: Date.now() + '_' + Math.random().toString(16).slice(2),
+  return {
+    id: state.resultId || (Date.now() + '_' + Math.random().toString(16).slice(2)),
     schoolName: state.schoolName || '',
     studentName: state.studentName || '',
     attempt: getAttempt(),
@@ -913,15 +925,51 @@ function saveCurrentResultManual(){
     level2: s2,
     level3: s3,
     total: total,
-    elapsedMs: state.elapsedMs || getElapsedMs(),
-    elapsedText: formatDuration(state.elapsedMs || getElapsedMs()),
+    elapsedMs: elapsed,
+    elapsedText: formatDuration(elapsed),
     date: new Date().toLocaleString('ar-OM'),
-    manualSave: true
+    status: status || 'in-progress',
+    updatedAt: Date.now()
   };
+}
 
-  saveResultRemote(record).then((ok)=>{
+async function saveProgressToFirebase(status){
+  const db = firebaseDb();
+  if(!db){
+    console.warn('Firebase is not available; progress saved locally only.');
+    return false;
+  }
+
+  if(!state.resultId){
+    state.resultId = Date.now() + '_' + Math.random().toString(16).slice(2);
+  }
+
+  const record = buildResultRecord(status);
+  record.id = state.resultId;
+
+  try{
+    if(!state.firebaseKey){
+      const ref = db.ref(FIREBASE_RESULTS_PATH).push();
+      state.firebaseKey = ref.key;
+      record.createdAt = Date.now();
+      record.firebaseId = state.firebaseKey;
+      await ref.set(record);
+    }else{
+      record.firebaseId = state.firebaseKey;
+      await db.ref(FIREBASE_RESULTS_PATH + '/' + state.firebaseKey).update(record);
+    }
+    return true;
+  }catch(e){
+    console.error('Firebase progress save error:', e);
+    return false;
+  }
+}
+
+function saveCurrentResultManual(){
+  if(state.startTime!=null){ state.elapsedMs = getElapsedMs(); }
+  saveProgressToFirebase('manual-save').then((ok)=>{
     if(ok){
-      showToast('تم حفظ نتيجة: ' + (record.studentName || 'الطالبة') + ' في Firebase','ok');
+      showToast('تم حفظ نتيجة: ' + (state.studentName || 'الطالبة') + ' في Firebase','ok');
     }else{
       showToast('فشل الحفظ في Firebase — راجع Rules أو الاتصال','bad');
     }
@@ -930,37 +978,18 @@ function saveCurrentResultManual(){
 
 function saveCurrentResult(){
   if(state._savedFinalResult) return;
-  const s1 = state.results[1].score || 0;
-  const s2 = state.results[2].score || 0;
-  const s3 = state.results[3].score || 0;
-  const total = s1 + s2 + s3;
-  const elapsed = state.elapsedMs || getElapsedMs();
-  const attempt = getAttempt();
+  if(state.startTime!=null){ state.endTime = Date.now(); state.elapsedMs = getElapsedMs(); }
 
-  const record = {
-    id: Date.now() + '_' + Math.random().toString(16).slice(2),
-    schoolName: state.schoolName || '',
-    studentName: state.studentName || '',
-    attempt: attempt,
-    level1: s1,
-    level2: s2,
-    level3: s3,
-    total: total,
-    elapsedMs: elapsed,
-    elapsedText: formatDuration(elapsed),
-    date: new Date().toLocaleString('ar-OM')
-  };
-
+  const record = buildResultRecord('completed');
   const list = loadAllResults();
   list.push(record);
   saveAllResults(list);
 
-  // حفظ مركزي في Firebase لجميع الأجهزة
-  saveResultRemote(record).then((ok)=>{
+  saveProgressToFirebase('completed').then((ok)=>{
     if(ok){
-      showToast('تم حفظ نتيجة: ' + (record.studentName || 'الطالبة') + ' في Firebase','ok');
+      showToast('تم حفظ نتيجة: ' + (state.studentName || 'الطالبة') + ' في Firebase','ok');
     }else{
-      showToast('تم الحفظ محليًا فقط — راجع إعدادات Firebase / Rules','bad');
+      showToast('تم الحفظ محليًا فقط — راجع الإنترنت أو Firebase Rules','bad');
     }
   });
 
