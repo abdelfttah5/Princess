@@ -85,8 +85,6 @@ button{border:0;cursor:pointer;padding:12px 16px;border-radius:16px;font-weight:
 
           <div class="btnRow">
             <button class="secondary" id="btnReset" type="button">تصفير</button>
-            <button class="secondary" id="btnAdmin" type="button">أدمن</button>
-            <button class="secondary" id="btnTestFirebase" type="button">اختبار Firebase</button>
             <button class="primary" id="btnEnter" type="button">الدخول</button>
           </div>
 
@@ -207,73 +205,16 @@ button{border:0;cursor:pointer;padding:12px 16px;border-radius:16px;font-weight:
 
 </div>
 
-
-<div id="adminModal" class="hidden" style="position:fixed;inset:0;z-index:3000;background:rgba(15,23,42,.42);display:none;align-items:center;justify-content:center;padding:16px">
-  <div style="width:min(980px,96vw);max-height:88vh;overflow:auto;background:#fff;border-radius:22px;border:1px solid rgba(2,6,23,.14);box-shadow:0 30px 90px rgba(2,6,23,.28);padding:16px">
-    <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
-      <div style="font-weight:1000;font-size:20px">لوحة الأدمن — نتائج الطالبات</div>
-      <button class="secondary" id="btnCloseAdmin" type="button">إغلاق</button>
-    </div>
-
-    <div id="adminLoginBox" style="margin-top:14px;border:1px solid rgba(2,6,23,.12);border-radius:16px;padding:12px;background:#f8fafc">
-      <label style="font-weight:1000">الرقم السري للأدمن</label>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
-        <input id="adminPass" type="password" placeholder="اكتب الرقم السري" style="flex:1;min-width:220px"/>
-        <button class="primary" id="btnAdminLogin" type="button">دخول الأدمن</button>
-      </div>
-      <div style="margin-top:8px;font-weight:900;color:#64748b">الفرز: الأعلى درجة أولًا، وإذا تساوت الدرجات يظهر الأقل وقتًا أولًا.</div>
-      <div style="margin-top:8px;font-weight:900;color:#64748b">حالة Firebase: إذا لم تضع بيانات المشروع في الكود سيتم الحفظ محليًا فقط.</div>
-    </div>
-
-    <div id="adminPanel" class="hidden" style="margin-top:14px">
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-        <button class="primary" id="btnExportCSV" type="button">تصدير Excel/CSV</button>
-        <button class="secondary" id="btnPrintAdmin" type="button">طباعة / PDF</button>
-        <button class="secondary" id="btnClearResults" type="button">مسح النتائج من هذا الجهاز</button>
-        <span id="adminCount" style="font-weight:1000;color:#334155"></span>
-      </div>
-
-      <table class="table" id="adminResultsTable">
-        <thead>
-          <tr>
-            <th class="center">الترتيب</th>
-            <th>اسم المدرسة</th>
-            <th>اسم الطالب/ة</th>
-            <th class="center">المحاولة</th>
-            <th class="center">المستوى 1</th>
-            <th class="center">المستوى 2</th>
-            <th class="center">المستوى 3</th>
-            <th class="center">الإجمالي</th>
-            <th class="center">الوقت</th>
-            <th class="center">التاريخ</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-
-      <div style="margin-top:10px;font-weight:900;color:#64748b;line-height:1.8">
-        ملاحظة: هذه اللوحة تجمع النتائج المحفوظة داخل نفس المتصفح/الجهاز فقط. لجمع نتائج أجهزة متعددة تحتاج رفع النشاط على موقع واحد مع قاعدة بيانات.
-      </div>
-    </div>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 
 
-<!-- Firebase Realtime Database SDK -->
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
 <script>
 'use strict';
 
-/* =========================
-   Firebase إعدادات الربط
-   =========================
-   مهم: استبدل القيم التالية من Firebase Console:
-   Project settings > General > Your apps > Firebase SDK snippet > Config
-*/
+
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBjmQRGuA_kFhr8_jqqOrOY0GyibUUYkD0",
   authDomain: "princess-829cd.firebaseapp.com",
@@ -283,79 +224,80 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "350369232804",
   appId: "1:350369232804:web:e6242c367b2ef3637b3331"
 };
-
 const FIREBASE_RESULTS_PATH = "princessCompetition/results";
-let firebaseReady = false;
-
-function isFirebaseConfigured(){
-  return FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.includes("PUT_") &&
-         FIREBASE_CONFIG.databaseURL && !FIREBASE_CONFIG.databaseURL.includes("PUT_");
-}
+let firebaseDb = null;
+let firebaseSessionKey = null;
 
 function initFirebase(){
   try{
-    if(!isFirebaseConfigured()){
-      console.warn("Firebase config not set. Results will be saved locally only.");
-      return false;
-    }
-    if(typeof firebase === "undefined"){
-      console.warn("Firebase SDK not loaded.");
-      return false;
-    }
-    if(!firebase.apps.length){
+    if(!window.firebase) return false;
+    if(!firebase.apps || firebase.apps.length===0){
       firebase.initializeApp(FIREBASE_CONFIG);
     }
-    firebaseReady = true;
+    firebaseDb = firebase.database();
     return true;
-  }catch(e){
-    console.error("Firebase init error:", e);
-    firebaseReady = false;
+  }catch(err){
+    console.error("Firebase init error:", err);
     return false;
   }
 }
 
-function firebaseDb(){
-  if(!firebaseReady) initFirebase();
-  if(!firebaseReady) return null;
-  return firebase.database();
+function getFirebaseSessionKey(){
+  if(firebaseSessionKey) return firebaseSessionKey;
+  const stored = sessionStorage.getItem("princess_firebase_session_key");
+  if(stored){ firebaseSessionKey = stored; return stored; }
+  firebaseSessionKey = "session_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
+  sessionStorage.setItem("princess_firebase_session_key", firebaseSessionKey);
+  return firebaseSessionKey;
 }
 
-async function saveResultRemote(record){
-  const db = firebaseDb();
-  if(!db) return false;
-  try{
-    const ref = db.ref(FIREBASE_RESULTS_PATH).push();
-    record.firebaseId = ref.key;
-    record.createdAt = Date.now();
-    await ref.set(record);
-    return true;
-  }catch(e){
-    console.error("Firebase save error:", e);
+function cleanRows(rows){
+  return (rows || []).map(r => ({
+    n: r.n || "",
+    kind: r.kind || "",
+    question: r.q || "",
+    answer: r.a || "",
+    ok: r.ok || ""
+  }));
+}
+
+async function saveToFirebase(stage){
+  const ok = initFirebase();
+  if(!ok || !firebaseDb){
+    showToast("لم يتم الاتصال بـ Firebase. تأكد من وجود الإنترنت وقواعد قاعدة البيانات.", "bad");
     return false;
   }
-}
 
-async function loadResultsRemote(){
-  const db = firebaseDb();
-  if(!db) return null;
-  try{
-    const snap = await db.ref(FIREBASE_RESULTS_PATH).once("value");
-    const val = snap.val() || {};
-    return Object.keys(val).map(k => ({firebaseId:k, ...val[k]}));
-  }catch(e){
-    console.error("Firebase load error:", e);
-    return null;
-  }
-}
+  const s1 = state.results[1].score || 0;
+  const s2 = state.results[2].score || 0;
+  const s3 = state.results[3].score || 0;
+  const payload = {
+    stage: stage || "update",
+    schoolName: state.schoolName || "",
+    studentName: state.studentName || "",
+    attempt: getAttempt(),
+    currentLevel: state.level || 1,
+    currentQuestion: (state.qIndex || 0) + 1,
+    level1Score: s1,
+    level2Score: s2,
+    level3Score: s3,
+    totalScore: s1 + s2 + s3,
+    elapsedText: state.startTime!=null ? formatDuration(getElapsedMs()) : "",
+    results: {
+      level1: { score: s1, rows: cleanRows(state.results[1].rows) },
+      level2: { score: s2, rows: cleanRows(state.results[2].rows) },
+      level3: { score: s3, rows: cleanRows(state.results[3].rows) }
+    },
+    updatedAt: new Date().toISOString(),
+    userAgent: navigator.userAgent || ""
+  };
 
-async function clearResultsRemote(){
-  const db = firebaseDb();
-  if(!db) return false;
   try{
-    await db.ref(FIREBASE_RESULTS_PATH).remove();
+    await firebaseDb.ref(FIREBASE_RESULTS_PATH + "/" + getFirebaseSessionKey()).update(payload);
     return true;
-  }catch(e){
-    console.error("Firebase clear error:", e);
+  }catch(err){
+    console.error("Firebase save error:", err);
+    showToast("تعذر حفظ البيانات في Firebase. راجع قواعد Realtime Database.", "bad");
     return false;
   }
 }
@@ -525,7 +467,6 @@ function setAttempt(n){ localStorage.setItem('princess_attempt', String(n)); }
 
 const state={
   schoolName:'', studentName:'',
-  firebaseKey:null, resultId:null, _savedFinalResult:false,
   answerLocked:false,
   startTime:null, endTime:null, elapsedMs:0,
   level:1, qIndex:0, score:0,
@@ -605,19 +546,15 @@ function startLevel(lvl){
   renderQuestion();
 }
 
-function enterApp(){
+async function enterApp(){
   const school=$('schoolName').value.trim();
   const student=$('studentName').value.trim();
   if(!school||!student) return showToast('اكتب اسم المدرسة واسم الطالب/ة','bad');
   state.schoolName=school; state.studentName=student;
-  state.firebaseKey=null; state.resultId=null; state._savedFinalResult=false;
   state.startTime=null; state.endTime=null; state.elapsedMs=0;
-  // reset results
   state.results={1:{score:0,max:10,rows:[]},2:{score:0,max:10,rows:[]},3:{score:0,max:10,rows:[]}};
-  saveProgressToFirebase('started').then((ok)=>{
-    if(ok) showToast('تم تسجيل بداية المحاولة في Firebase','ok');
-    else showToast('لم يتم الاتصال بـ Firebase — سيتم الحفظ عند نهاية المستوى','bad');
-  });
+  const saved = await saveToFirebase('login');
+  if(saved) showToast('تم تسجيل الدخول وحفظ البيانات في Firebase','ok');
   startLevel(1);
 }
 
@@ -742,6 +679,8 @@ function showLevelResult(){
 
   const tbody=$('lvlResTable').querySelector('tbody');
   tbody.innerHTML='';
+  saveToFirebase('level_'+state.level);
+
   state.results[state.level].rows.forEach(r=>{
     const tr=document.createElement('tr');
     tr.innerHTML=`<td class="center">${r.n}</td><td>${esc(r.kind)}</td><td>${esc(r.q)}</td><td class="ltr">${esc(r.a)}</td><td class="center">${r.ok}</td>`;
@@ -749,14 +688,6 @@ function showLevelResult(){
   });
 
   $('btnExportLevel2').onclick=()=>exportPDF('level', state.level);
-
-  // حفظ/تحديث النتيجة بعد كل مستوى حتى لو خرج الطالب من الهاتف
-  saveProgressToFirebase('level-'+state.level).then((ok)=>{
-    if(ok) showToast('تم تحديث النتيجة في Firebase','ok');
-  });
-
-  // حفظ النتيجة فور انتهاء المستوى الثالث حتى لو لم يضغط المستخدم زر التالي
-  if(state.level===3){ saveCurrentResult(); }
   $('btnContinue').onclick=()=>{
     if(state.level<3) startLevel(state.level+1);
     else showFinal();
@@ -785,8 +716,7 @@ function showFinal(){
     <tr><td class="center">3</td><td class="center">${s3}</td><td class="center">10</td></tr>
   `;
 
-  saveCurrentResult();
-
+  saveToFirebase('final');
   $('btnExportAll').onclick=()=>exportPDF('all', 0);
 }
 
@@ -810,6 +740,7 @@ function makeHeaderHTML(titleLine){
 }
 
 function exportPDF(mode,lvl){
+  try{ hideAnswersModal(); }catch(e){}
   let titleLine=''; let rowsHtml='';
   if(mode==='level'){ 
     titleLine=`تقرير نتيجة المستوى ${lvl} (الدرجة: ${state.results[lvl].score}/10)`;
@@ -832,344 +763,27 @@ function exportPDF(mode,lvl){
   <style>@page{size:A4;margin:18mm} body{font-family:Cairo,Arial;margin:0;color:#111}
   table{width:100%;border-collapse:collapse;font-family:Cairo,Arial;font-weight:900}
   th,td{border:1px solid #ddd;padding:8px;font-size:12px;vertical-align:top} th{background:#f7f7f7}
-  .footer{margin-top:18px;text-align:center;font-weight:1000}</style></head><body>
+  .footer{margin-top:18px;text-align:center;font-weight:1000}
+  .printActions{position:fixed;top:10px;left:10px;display:flex;gap:8px;z-index:9999}
+  .printActions button{font-family:Cairo,Arial;font-weight:900;border:1px solid #ddd;background:#fff;border-radius:10px;padding:8px 12px;cursor:pointer}
+  @media print{.printActions{display:none!important} body{background:#fff!important}}</style></head><body>
+  <div class="printActions">
+    <button onclick="window.print()">طباعة / حفظ PDF</button>
+    <button onclick="window.close()">إغلاق التقرير</button>
+  </div>
   ${makeHeaderHTML(titleLine)}
   <table><thead><tr><th style="width:48px;text-align:center">#</th><th style="width:110px">النوع</th><th>السؤال</th><th style="width:180px">إجابة الطالب/ة</th><th style="width:70px;text-align:center">الحالة</th></tr></thead>
   <tbody>${rowsHtml}</tbody></table>
   <div class="footer">أ/ سارة النهدي — معلمة اللغة الإنجليزية &nbsp;&nbsp;|&nbsp;&nbsp; مديرة المدرسة أ/ ليلي الحبشي</div>
-  
-<div id="answersModal" class="hidden" style="position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:16px">
-  <div style="width:min(760px,96vw);max-height:82vh;overflow:auto;background:#fff;border-radius:18px;border:1px solid rgba(2,6,23,.12);box-shadow:0 24px 80px rgba(2,6,23,.25);padding:14px 14px 10px">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-      <div style="font-weight:1000">الإجابات الصحيحة حسب ترتيب الأسئلة الحالي (المستوى الحالي)</div>
-      <button class="secondary" id="btnCloseAnswers" type="button">إغلاق</button>
-    </div>
-    <div style="margin-top:10px;opacity:.8;font-weight:900" id="answersMeta"></div>
-    <ol id="answersList" style="margin-top:10px;line-height:1.9;font-weight:900"></ol>
-  </div>
-</div>
-
 </body></html>`;
 
   const w=window.open('', '_blank');
   if(!w){ showToast('الرجاء السماح بالنوافذ المنبثقة لتصدير PDF','bad'); return; }
-  w.document.open(); w.document.write(report); w.document.close(); w.focus();
-  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 300);
-}
-
-
-const ADMIN_PASSWORD = 'AhMd';
-
-
-
-async function manualFirebaseTest(){
-  const db = firebaseDb();
-  if(!db){
-    showToast('Firebase غير متصل: تأكد من الإنترنت ومن تحميل مكتبات Firebase','bad');
-    return;
-  }
-  try{
-    const ref = db.ref(FIREBASE_RESULTS_PATH).push();
-    const testRecord = {
-      schoolName: 'اختبار الاتصال',
-      studentName: 'Test Firebase',
-      attempt: 0,
-      level1: 0,
-      level2: 0,
-      level3: 0,
-      total: 0,
-      elapsedMs: 0,
-      elapsedText: '00:00',
-      date: new Date().toLocaleString('ar-OM'),
-      test: true,
-      createdAt: Date.now()
-    };
-    await ref.set(testRecord);
-    showToast('تم إرسال اختبار Firebase بنجاح — راجع Data','ok');
-  }catch(e){
-    console.error('Manual Firebase test failed:', e);
-    showToast('فشل اختبار Firebase — غالبًا Rules أو اتصال الإنترنت','bad');
-  }
-}
-
-function firebaseStatusText(){
-  if(isFirebaseConfigured() && firebaseReady) return 'Firebase متصل';
-  if(isFirebaseConfigured() && !firebaseReady) return 'Firebase غير متصل';
-  return 'Firebase غير مفعّل';
-}
-
-function loadAllResults(){
-  try { return JSON.parse(localStorage.getItem('princess_all_results') || '[]'); }
-  catch(e){ return []; }
-}
-
-function saveAllResults(list){
-  localStorage.setItem('princess_all_results', JSON.stringify(list || []));
-}
-
-
-
-function buildResultRecord(status){
-  const s1 = state.results[1].score || 0;
-  const s2 = state.results[2].score || 0;
-  const s3 = state.results[3].score || 0;
-  const total = s1 + s2 + s3;
-  const elapsed = state.startTime ? getElapsedMs() : (state.elapsedMs || 0);
-
-  return {
-    id: state.resultId || (Date.now() + '_' + Math.random().toString(16).slice(2)),
-    schoolName: state.schoolName || '',
-    studentName: state.studentName || '',
-    attempt: getAttempt(),
-    level1: s1,
-    level2: s2,
-    level3: s3,
-    total: total,
-    elapsedMs: elapsed,
-    elapsedText: formatDuration(elapsed),
-    date: new Date().toLocaleString('ar-OM'),
-    status: status || 'in-progress',
-    updatedAt: Date.now()
-  };
-}
-
-async function saveProgressToFirebase(status){
-  const db = firebaseDb();
-  if(!db){
-    console.warn('Firebase is not available; progress saved locally only.');
-    return false;
-  }
-
-  if(!state.resultId){
-    state.resultId = Date.now() + '_' + Math.random().toString(16).slice(2);
-  }
-
-  const record = buildResultRecord(status);
-  record.id = state.resultId;
-
-  try{
-    if(!state.firebaseKey){
-      const ref = db.ref(FIREBASE_RESULTS_PATH).push();
-      state.firebaseKey = ref.key;
-      record.createdAt = Date.now();
-      record.firebaseId = state.firebaseKey;
-      await ref.set(record);
-    }else{
-      record.firebaseId = state.firebaseKey;
-      await db.ref(FIREBASE_RESULTS_PATH + '/' + state.firebaseKey).update(record);
-    }
-    return true;
-  }catch(e){
-    console.error('Firebase progress save error:', e);
-    return false;
-  }
-}
-
-function saveCurrentResultManual(){
-  if(state.startTime!=null){ state.elapsedMs = getElapsedMs(); }
-  saveProgressToFirebase('manual-save').then((ok)=>{
-    if(ok){
-      showToast('تم حفظ نتيجة: ' + (state.studentName || 'الطالبة') + ' في Firebase','ok');
-    }else{
-      showToast('فشل الحفظ في Firebase — راجع Rules أو الاتصال','bad');
-    }
-  });
-}
-
-function saveCurrentResult(){
-  if(state._savedFinalResult) return;
-  if(state.startTime!=null){ state.endTime = Date.now(); state.elapsedMs = getElapsedMs(); }
-
-  const record = buildResultRecord('completed');
-  const list = loadAllResults();
-  list.push(record);
-  saveAllResults(list);
-
-  saveProgressToFirebase('completed').then((ok)=>{
-    if(ok){
-      showToast('تم حفظ نتيجة: ' + (state.studentName || 'الطالبة') + ' في Firebase','ok');
-    }else{
-      showToast('تم الحفظ محليًا فقط — راجع الإنترنت أو Firebase Rules','bad');
-    }
-  });
-
-  state._savedFinalResult = true;
-}
-
-function sortedResults(){
-  return loadAllResults().sort((a,b)=>{
-    const scoreDiff = (b.total || 0) - (a.total || 0);
-    if(scoreDiff !== 0) return scoreDiff;
-    return (a.elapsedMs || 0) - (b.elapsedMs || 0);
-  });
-}
-
-
-async function getAllResultsForAdmin(){
-  const remote = await loadResultsRemote();
-  const rows = (remote && Array.isArray(remote)) ? remote : loadAllResults();
-  return rows.sort((a,b)=>{
-    const scoreDiff = (b.total || 0) - (a.total || 0);
-    if(scoreDiff !== 0) return scoreDiff;
-    return (a.elapsedMs || 0) - (b.elapsedMs || 0);
-  });
-}
-
-function openAdminModal(){
-  const modal = document.getElementById('adminModal');
-  if(!modal) return;
-  modal.classList.remove('hidden');
-  modal.style.display='flex';
-  const pass = document.getElementById('adminPass');
-  if(pass) { pass.value=''; setTimeout(()=>pass.focus(), 50); }
-  const loginBox = document.getElementById('adminLoginBox');
-  const panel = document.getElementById('adminPanel');
-  if(loginBox) loginBox.classList.remove('hidden');
-  if(panel) panel.classList.add('hidden');
-}
-
-function closeAdminModal(){
-  const modal = document.getElementById('adminModal');
-  if(!modal) return;
-  modal.classList.add('hidden');
-  modal.style.display='none';
-}
-
-function adminLogin(){
-  const passEl = document.getElementById('adminPass');
-  const pass = (passEl ? passEl.value : '').trim();
-  if(pass !== ADMIN_PASSWORD){
-    showToast('الرقم السري غير صحيح','bad');
-    return;
-  }
-  const loginBox = document.getElementById('adminLoginBox');
-  const panel = document.getElementById('adminPanel');
-  if(loginBox) loginBox.classList.add('hidden');
-  if(panel) panel.classList.remove('hidden');
-  renderAdminResults();
-}
-
-async function renderAdminResults(){
-  const tbody = document.querySelector('#adminResultsTable tbody');
-  if(!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="10" class="center">جاري تحميل النتائج...</td></tr>';
-  const rows = await getAllResultsForAdmin();
-  tbody.innerHTML = '';
-  rows.forEach((r, idx)=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="center">${idx+1}</td>
-      <td>${esc(r.schoolName || '')}</td>
-      <td>${esc(r.studentName || '')}</td>
-      <td class="center">${esc(String(r.attempt || ''))}</td>
-      <td class="center">${r.level1 || 0}/10</td>
-      <td class="center">${r.level2 || 0}/10</td>
-      <td class="center">${r.level3 || 0}/10</td>
-      <td class="center"><b>${r.total || 0}/30</b></td>
-      <td class="center">${esc(r.elapsedText || formatDuration(r.elapsedMs || 0))}</td>
-      <td class="center">${esc(r.date || '')}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-  const count = document.getElementById('adminCount');
-  const source = firebaseStatusText();
-  if(count) count.textContent = `عدد النتائج المحفوظة: ${rows.length} — المصدر: ${source}`;
-}
-
-async function exportResultsCSV(){
-  const rows = await getAllResultsForAdmin();
-  const headers = ['Rank','School','Student','Attempt','Level 1','Level 2','Level 3','Total','Time','Date'];
-  const lines = [headers.join(',')];
-  rows.forEach((r, idx)=>{
-    const vals = [
-      idx+1,
-      r.schoolName || '',
-      r.studentName || '',
-      r.attempt || '',
-      (r.level1 || 0) + '/10',
-      (r.level2 || 0) + '/10',
-      (r.level3 || 0) + '/10',
-      (r.total || 0) + '/30',
-      r.elapsedText || formatDuration(r.elapsedMs || 0),
-      r.date || ''
-    ].map(v => '"' + String(v).replace(/"/g,'""') + '"');
-    lines.push(vals.join(','));
-  });
-  const blob = new Blob(['\ufeff' + lines.join('\n')], {type:'text/csv;charset=utf-8;'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'princess_results_sorted.csv';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
-
-async function printAdminResults(){
-  const rows = await getAllResultsForAdmin();
-  const bodyRows = rows.map((r, idx)=>`
-    <tr>
-      <td>${idx+1}</td>
-      <td>${esc(r.schoolName || '')}</td>
-      <td>${esc(r.studentName || '')}</td>
-      <td>${esc(String(r.attempt || ''))}</td>
-      <td>${r.level1 || 0}/10</td>
-      <td>${r.level2 || 0}/10</td>
-      <td>${r.level3 || 0}/10</td>
-      <td><b>${r.total || 0}/30</b></td>
-      <td>${esc(r.elapsedText || formatDuration(r.elapsedMs || 0))}</td>
-      <td>${esc(r.date || '')}</td>
-    </tr>
-  `).join('');
-
-  const report = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
-  <title>نتائج المسابقة</title>
-  <style>
-    @page{size:A4 landscape;margin:12mm}
-    body{font-family:Cairo,Arial;margin:0;color:#111}
-    table{width:100%;border-collapse:collapse;font-size:11px}
-    th,td{border:1px solid #bbb;padding:6px;text-align:center}
-    th{background:#f1f5f9}
-    .head{text-align:center;font-weight:900;line-height:1.8;margin-bottom:10px}
-  </style></head><body>
-    <div class="head">
-      وزارة التعليم<br>
-      المديرية العامة للتعليم لمحافظة ظفار<br>
-      مبادرة I'm the Princess — الصف السادس<br>
-      ترتيب النتائج: الأعلى درجة ثم الأقل وقتًا
-    </div>
-    <table>
-      <thead><tr>
-        <th>الترتيب</th><th>اسم المدرسة</th><th>اسم الطالب/ة</th><th>المحاولة</th>
-        <th>المستوى 1</th><th>المستوى 2</th><th>المستوى 3</th><th>الإجمالي</th><th>الوقت</th><th>التاريخ</th>
-      </tr></thead>
-      <tbody>${bodyRows}</tbody>
-    </table>
-    <div style="margin-top:16px;text-align:center;font-weight:900">
-      أ/ سارة النهدي — معلمة اللغة الإنجليزية &nbsp;&nbsp;|&nbsp;&nbsp; مديرة المدرسة أ/ ليلي الحبشي
-    </div>
-  </body></html>`;
-
-  const w = window.open('', '_blank');
-  if(!w){ showToast('الرجاء السماح بالنوافذ المنبثقة للطباعة','bad'); return; }
-  w.document.open();
-  w.document.write(report);
-  w.document.close();
-  w.focus();
-  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 300);
-}
-
-async function clearStoredResults(){
-  if(!confirm('هل تريد مسح جميع النتائج المحفوظة؟')) return;
-  saveAllResults([]);
-  if(firebaseReady || isFirebaseConfigured()){
-    await clearResultsRemote();
-  }
-  await renderAdminResults();
-  showToast('تم مسح النتائج','ok');
+  w.document.open(); w.document.write(report); w.document.close();
+  setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 700);
 }
 
 document.addEventListener('DOMContentLoaded', ()=>{
-  initFirebase();
   const att=getAttempt();
   setAttempt(att);
   $('attemptLabel').textContent=`محاولة رقم: ${att}`;
@@ -1181,17 +795,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const bsa=$('btnShowAnswers'); if(bsa) bsa.onclick=showAnswersModal;
   const bca=document.getElementById('btnCloseAnswers'); if(bca) bca.onclick=hideAnswersModal;
   const am=document.getElementById('answersModal'); if(am) am.addEventListener('click', (e)=>{ if(e.target===am) hideAnswersModal(); });
-  const btnAdmin = $('btnAdmin'); if(btnAdmin) btnAdmin.onclick = openAdminModal;
-  const btnCloseAdmin = document.getElementById('btnCloseAdmin'); if(btnCloseAdmin) btnCloseAdmin.onclick = closeAdminModal;
-  const btnAdminLogin = document.getElementById('btnAdminLogin'); if(btnAdminLogin) btnAdminLogin.onclick = adminLogin;
-  const adminPass = document.getElementById('adminPass'); if(adminPass) adminPass.addEventListener('keydown', (e)=>{ if(e.key==='Enter') adminLogin(); });
-  const btnExportCSV = document.getElementById('btnExportCSV'); if(btnExportCSV) btnExportCSV.onclick = exportResultsCSV;
-  const btnPrintAdmin = document.getElementById('btnPrintAdmin'); if(btnPrintAdmin) btnPrintAdmin.onclick = printAdminResults;
-  const btnClearResults = document.getElementById('btnClearResults'); if(btnClearResults) btnClearResults.onclick = clearStoredResults;
-  const adminModal = document.getElementById('adminModal'); if(adminModal) adminModal.addEventListener('click', (e)=>{ if(e.target===adminModal) closeAdminModal(); });
-
-  const btnTestFirebase = $('btnTestFirebase'); if(btnTestFirebase) btnTestFirebase.onclick = manualFirebaseTest;
-  const btnSaveFirebaseNow = $('btnSaveFirebaseNow'); if(btnSaveFirebaseNow) btnSaveFirebaseNow.onclick = saveCurrentResultManual;
 });
 function showAnswersModal(){
   const modal = document.getElementById('answersModal');
