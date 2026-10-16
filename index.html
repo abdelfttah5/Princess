@@ -208,8 +208,8 @@ button{border:0;cursor:pointer;padding:12px 16px;border-radius:16px;font-weight:
 <div class="toast" id="toast"></div>
 
 
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+
 
 <script>
 'use strict';
@@ -225,22 +225,8 @@ const FIREBASE_CONFIG = {
   appId: "1:350369232804:web:e6242c367b2ef3637b3331"
 };
 const FIREBASE_RESULTS_PATH = "princessCompetition/results";
-let firebaseDb = null;
 let firebaseSessionKey = null;
-
-function initFirebase(){
-  try{
-    if(!window.firebase) return false;
-    if(!firebase.apps || firebase.apps.length===0){
-      firebase.initializeApp(FIREBASE_CONFIG);
-    }
-    firebaseDb = firebase.database();
-    return true;
-  }catch(err){
-    console.error("Firebase init error:", err);
-    return false;
-  }
-}
+let firebaseWriteChain = Promise.resolve();
 
 function getFirebaseSessionKey(){
   if(firebaseSessionKey) return firebaseSessionKey;
@@ -262,12 +248,6 @@ function cleanRows(rows){
 }
 
 async function saveToFirebase(stage){
-  const ok = initFirebase();
-  if(!ok || !firebaseDb){
-    showToast("لم يتم الاتصال بـ Firebase. تأكد من وجود الإنترنت وقواعد قاعدة البيانات.", "bad");
-    return false;
-  }
-
   const s1 = state.results[1].score || 0;
   const s2 = state.results[2].score || 0;
   const s3 = state.results[3].score || 0;
@@ -292,39 +272,70 @@ async function saveToFirebase(stage){
     userAgent: navigator.userAgent || ""
   };
 
-  try{
-    await firebaseDb.ref(FIREBASE_RESULTS_PATH + "/" + getFirebaseSessionKey()).update(payload);
-    return true;
-  }catch(err){
-    console.error("Firebase save error:", err);
-    const code = (err && err.code) ? String(err.code) : "unknown";
-    const message = (err && err.message) ? String(err.message) : "Unknown error";
-    const hint = /permission_denied|permission denied/i.test(code + " " + message)
-      ? "تم رفض الكتابة: راجع نشر قواعد Realtime Database وصلاحيات المسار."
-      : /network|disconnected|unavailable/i.test(code + " " + message)
-      ? "تعذر الوصول إلى قاعدة البيانات: راجع الاتصال وحظر الشبكة."
-      : "افحص رسالة الخطأ التالية لتحديد السبب.";
-    const diagnostic = "Firebase: " + code + " — " + message + " | " + hint;
-    showToast(diagnostic, "bad");
-    let box = document.getElementById("firebaseDiagnostic");
-    if (!box) {
-      box = document.createElement("div");
-      box.id = "firebaseDiagnostic";
-      box.setAttribute("role", "alert");
-      box.style.cssText = "position:fixed;bottom:16px;left:16px;right:16px;z-index:99999;max-height:45vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#fff4f4;color:#8b1111;border:2px solid #c62828;border-radius:14px;padding:14px 44px 14px 16px;direction:ltr;text-align:left;font:14px/1.6 system-ui;box-shadow:0 6px 30px #0003";
-      const close = document.createElement("button");
-      close.textContent = "✕";
-      close.setAttribute("aria-label", "إغلاق التشخيص");
-      close.style.cssText = "position:absolute;right:10px;top:6px;padding:4px 10px;cursor:pointer";
-      close.onclick = () => box.remove();
-      box.appendChild(close);
-      document.body.appendChild(box);
+  // Use the live-tested Firebase REST endpoint; serialize writes to preserve score order.
+  const task = async () => {
+    const resultUrl = FIREBASE_CONFIG.databaseURL.replace(/\/+$/, "") + "/" +
+      FIREBASE_RESULTS_PATH + "/" + encodeURIComponent(getFirebaseSessionKey()) + ".json";
+    try {
+      const response = await fetch(resultUrl, {
+        method: "PUT",
+        mode: "cors",
+        cache: "no-store",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+      const responseText = await response.text();
+      if (!response.ok) {
+        throw new Error("Firebase REST HTTP " + response.status + ": " + responseText.slice(0, 500));
+      }
+      let stored;
+      try { stored = JSON.parse(responseText); }
+      catch (parseError) { throw new Error("Firebase returned invalid JSON after save"); }
+      if (!stored || stored.updatedAt !== payload.updatedAt || stored.stage !== payload.stage) {
+        throw new Error("Firebase did not confirm the saved result");
+      }
+      if (stage === "final") {
+        const checkResponse = await fetch(resultUrl, {method: "GET", mode: "cors", cache: "no-store"});
+        if (!checkResponse.ok) throw new Error("Firebase final verification HTTP " + checkResponse.status);
+        const savedResult = await checkResponse.json();
+        if (!savedResult || savedResult.stage !== "final" || savedResult.totalScore !== payload.totalScore) {
+          throw new Error("Firebase final score verification mismatch");
+        }
+      }
+      const diagnostic = document.getElementById("firebaseDiagnostic");
+      if (diagnostic) diagnostic.remove();
+      return true;
+    } catch (err) {
+      console.error("Firebase REST save error:", err);
+      const message = err && err.message ? String(err.message) : String(err);
+      const diagnostic = "Firebase REST: " + message +
+        "\nالمسار: " + FIREBASE_RESULTS_PATH +
+        "\nالاتصال: " + (navigator.onLine ? "متصل" : "غير متصل") +
+        "\nلم يتم حفظ هذه المرحلة في قاعدة البيانات.";
+      showToast("تعذر الحفظ: " + message.slice(0, 130), "bad");
+      let box = document.getElementById("firebaseDiagnostic");
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "firebaseDiagnostic";
+        box.setAttribute("role", "alert");
+        box.style.cssText = "position:fixed;bottom:16px;left:16px;right:16px;z-index:99999;max-height:45vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#fff4f4;color:#8b1111;border:2px solid #c62828;border-radius:14px;padding:14px 44px 14px 16px;direction:rtl;text-align:right;font:14px/1.6 system-ui;box-shadow:0 6px 30px #0003";
+        const close = document.createElement("button");
+        close.textContent = "✕";
+        close.setAttribute("aria-label", "إغلاق التشخيص");
+        close.style.cssText = "position:absolute;left:10px;top:6px;padding:4px 10px;cursor:pointer";
+        close.onclick = () => box.remove();
+        box.appendChild(close);
+        document.body.appendChild(box);
+      }
+      let info = document.getElementById("firebaseDiagnosticInfo");
+      if (!info) { info = document.createElement("div"); info.id = "firebaseDiagnosticInfo"; box.appendChild(info); }
+      info.textContent = diagnostic;
+      return false;
     }
-    let info = document.getElementById("firebaseDiagnosticInfo");
-    if (!info) { info = document.createElement("div"); info.id = "firebaseDiagnosticInfo"; box.appendChild(info); }
-    info.textContent = diagnostic + "\npath: " + FIREBASE_RESULTS_PATH + "\ndatabase: " + FIREBASE_CONFIG.databaseURL;
-    return false;
-  }
+  };
+  const pending = firebaseWriteChain.then(task, task);
+  firebaseWriteChain = pending.catch(() => false);
+  return pending;
 }
 
 
