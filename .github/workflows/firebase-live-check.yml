@@ -1,0 +1,62 @@
+name: Verify Firebase Realtime Database
+on:
+  push:
+    paths:
+      - '.github/workflows/firebase-live-check.yml'
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Perform live isolated Firebase write, read and cleanup
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error, uuid, datetime
+          base = 'https://princess-829cd-default-rtdb.europe-west1.firebasedatabase.app'
+          key = '__test_' + uuid.uuid4().hex[:14]
+          url = base + '/princessCompetition/results/' + key + '.json'
+          record = {'testOnly': True, 'value': 'princess_rtdb_verification', 'stage': 'diagnostic'}
+          status = {'testPath': 'princessCompetition/results/' + key, 'testedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'success': False}
+          def request(method, data=None):
+              body = None if data is None else json.dumps(data).encode('utf-8')
+              req = urllib.request.Request(url, data=body, method=method, headers={'Content-Type':'application/json','Origin':'https://abdelfttah5.github.io'})
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as resp:
+                      return resp.status, resp.read().decode('utf-8')[:500], resp.headers.get('Access-Control-Allow-Origin','')
+              except urllib.error.HTTPError as e:
+                  return e.code, e.read().decode('utf-8')[:500], e.headers.get('Access-Control-Allow-Origin','')
+          try:
+              w, wb, wc = request('PUT', record)
+              status.update(writeHttp=w, writeResponse=wb, corsOrigin=wc)
+              if w == 200:
+                  r, rb, rc = request('GET')
+                  status.update(readHttp=r, readResponse=rb)
+                  status['success'] = (r==200 and json.loads(rb).get('value') == record['value'])
+          except Exception as exc:
+              status['error'] = str(exc)[:500]
+          finally:
+              if status.get('writeHttp') == 200:
+                  try:
+                      d, db, dc = request('DELETE')
+                      status.update(deleteHttp=d, deleteResponse=db)
+                      status['success'] = status['success'] and d==200
+                  except Exception as exc:
+                      status['cleanupError'] = str(exc)[:500]
+                      status['success'] = False
+          with open('firebase-live-test-result.json','w',encoding='utf-8') as f:
+              json.dump(status,f,ensure_ascii=False,indent=2)
+          print('Firebase isolated live result: ' + json.dumps(status,ensure_ascii=False))
+          PY
+      - name: Record report in repository
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add firebase-live-test-result.json
+          git commit -m "Record Firebase live test outcome [skip ci]" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
