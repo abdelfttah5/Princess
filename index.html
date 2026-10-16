@@ -233,6 +233,7 @@ button{border:0;cursor:pointer;padding:12px 16px;border-radius:16px;font-weight:
 <label>البحث<input id="prSearch" placeholder="اسم المدرسة أو الطالبة" type="search"/></label>
 <label>المدرسة<select id="prSchool"><option value="">جميع المدارس</option></select></label>
 <label>الحالة<select id="prFilter"><option value="all">كل المحاولات</option><option value="done">المكتملة فقط</option><option value="pending">غير المكتملة</option></select></label>
+<label>تاريخ النتائج<select id="prDay"><option value="all">جميع الأيام</option><option value="today">نتائج اليوم (بتوقيت عُمان)</option></select></label>
 <button type="button" class="prbutton" id="prRefresh">تحديث من Firebase</button>
 <button type="button" class="prbutton main" id="prPdf">تصدير النتائج PDF</button>
 <button type="button" class="prbutton" id="prCsv">تصدير Excel / CSV</button>
@@ -823,6 +824,21 @@ const PR_KEY_HASH="d3f75546545f022db9ceb8b57ab42a40dcea2c6ae9d55f738f195a06cb2af
 let prLogged=false,prEntries=[],prVisible=[],prLoaded=false;
 const pe=id=>document.getElementById(id);
 const hx=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// Both ISO-8601 timestamps (modern results) and numeric milliseconds (older results).
+// Dates are compared using the actual calendar day in Oman, not the browser's timezone.
+function prDateTimestamp(d){
+ for(const value of [d.updatedAt,d.createdAt,d.date]){
+  if(value==null||value==="")continue;
+  const numeric=typeof value==="number" ? value : (typeof value==="string"&&/^\d{10,13}$/.test(value.trim())?Number(value):NaN);
+  if(Number.isFinite(numeric)&&numeric>0)return numeric<100000000000?numeric*1000:numeric;
+  const parsed=Date.parse(value);
+  if(Number.isFinite(parsed))return parsed;
+ }
+ return 0;
+}
+const prOmanDay = timestamp => timestamp && Number.isFinite(timestamp)
+ ? new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Muscat",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(timestamp))
+ : "";
 function prEntry(key,d){
  if(!d||typeof d!=="object"||Array.isArray(d))return null;
  const old=("level1" in d)||("total" in d);
@@ -832,8 +848,8 @@ function prEntry(key,d){
  const done=d.status==="completed"||d.stage==="final";
  const ms=Number(d.elapsedMs||0);
  const tm=d.elapsedText||(ms?(Math.floor(ms/60000)+":"+String(Math.floor(ms/1000)%60).padStart(2,"0")):"—");
- const when=Number(d.updatedAt||d.createdAt||0);
- return {key,school:String(d.schoolName||""),name:String(d.studentName||""),attempt:Number(d.attempt)||1,a,b,c,total,ms,tm,done,when,date:d.date||(when?new Date(when).toLocaleString("ar-OM"):"")};
+ const when=prDateTimestamp(d);
+ return {key,school:String(d.schoolName||""),name:String(d.studentName||""),attempt:Number(d.attempt)||1,a,b,c,total,ms,tm,done,when,date:d.date||(when?new Date(when).toLocaleString("ar-OM",{timeZone:"Asia/Muscat"}):"")};
 }
 function prOpen(){prLogged=false;prLoaded=false;pe("prPass").value="";pe("prLoginError").textContent="";pe("prLogin").hidden=false;pe("prPanel").hidden=true;pe("prAdminModal").classList.add("open");pe("prAdminModal").setAttribute("aria-hidden","false");pe("prPass").focus();}
 function prClose(){pe("prAdminModal").classList.remove("open");pe("prAdminModal").setAttribute("aria-hidden","true");prLogged=false;prLoaded=false;prEntries=[];prVisible=[];pe("prPass").value="";}
@@ -863,26 +879,28 @@ async function prLoad(){
 }
 function prApply(){
  if(!prLogged||!prLoaded)return;
- const q=pe("prSearch").value.trim().toLocaleLowerCase(),sc=pe("prSchool").value,st=pe("prFilter").value;
- prVisible=prEntries.filter(r=>(!sc||sc===r.school)&&(st==="all"||(st==="done"?r.done:!r.done))&&(!q||(r.school+" "+r.name).toLocaleLowerCase().includes(q)));
+ const q=pe("prSearch").value.trim().toLocaleLowerCase(),sc=pe("prSchool").value,st=pe("prFilter").value,day=pe("prDay").value;
+ const today=prOmanDay(Date.now());
+ prVisible=prEntries.filter(r=>(!sc||sc===r.school)&&(st==="all"||(st==="done"?r.done:!r.done))&&(day==="all"||(r.when>0&&prOmanDay(r.when)===today))&&(!q||(r.school+" "+r.name).toLocaleLowerCase().includes(q)));
  const done=prVisible.filter(r=>r.done);
  pe("prTotal").textContent=prVisible.length;pe("prComplete").textContent=done.length;pe("prPerfect").textContent=done.filter(r=>r.total===30).length;
  pe("prAverage").textContent=done.length?(done.reduce((a,r)=>a+r.total,0)/done.length).toFixed(1):"—";
  pe("prBody").innerHTML=prVisible.length?prVisible.map((r,i)=>'<tr><td>'+(i+1)+'</td><td>'+hx(r.school)+'</td><td>'+hx(r.name)+'</td><td>'+r.attempt+'</td><td>'+r.a+'/10</td><td>'+r.b+'/10</td><td>'+r.c+'/10</td><td><b>'+r.total+'/30</b></td><td>'+hx(r.tm)+'</td><td>'+(r.done?"مكتملة":"غير مكتملة")+'</td><td>'+hx(r.date)+'</td></tr>').join(""):'<tr><td colspan="11">لا توجد نتائج مطابقة</td></tr>';
- pe("prStatus").textContent="تم تحميل "+prEntries.length+" سجل من Firebase — المعروض "+prVisible.length+".";
+ pe("prStatus").textContent="تم تحميل "+prEntries.length+" سجل من Firebase — المعروض "+prVisible.length+(day==="today"?" (نتائج اليوم في عُمان: "+today+")":"")+".";
 }
 function prCsv(){
  if(!prLogged||!prLoaded)return;
  const quote=x=>{let s=String(x==null?"":x);if(/^\s*[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
  const csv=[["م","المدرسة","الطالبة","المحاولة","و1","و2","و3","المجموع","المدة","الحالة","التاريخ"].map(quote).join(",")];
  prVisible.forEach((r,i)=>csv.push([i+1,r.school,r.name,r.attempt,r.a,r.b,r.c,r.total,r.tm,r.done?"مكتملة":"غير مكتملة",r.date].map(quote).join(",")));
- const bl=new Blob(["\ufeff"+csv.join("\r\n")],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(bl);a.download="Princess_All_Results.csv";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+ const bl=new Blob(["\ufeff"+csv.join("\r\n")],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(bl);a.download=pe("prDay").value==="today"?"Princess_Today_Results.csv":"Princess_All_Results.csv";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
 function prPdf(){
  if(!prLogged||!prLoaded||!prVisible.length){pe("prStatus").textContent="لا توجد نتائج لإصدار التقرير.";return;}
  const heads=["م","اسم المدرسة","اسم الطالبة","المحاولة","الوحدة 1","الوحدة 2","الوحدة 3","المجموع","المدة","الحالة","التاريخ"];
  const trs=prVisible.map((r,i)=>[i+1,r.school,r.name,r.attempt,r.a+"/10",r.b+"/10",r.c+"/10",r.total+"/30",r.tm,r.done?"مكتملة":"غير مكتملة",r.date]).map(vals=>"<tr>"+vals.map(x=>"<td>"+hx(x)+"</td>").join("")+"</tr>").join("");
- const report='<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>نتائج Princess</title><style>@page{size:A4 landscape;margin:11mm}body{font-family:Tahoma,Arial,sans-serif;color:#1b263e;margin:0}h1,h2{text-align:center;margin:2px 0}h1{font-size:19px;color:#672583}h2{font-size:13px}p{text-align:center;font-size:11px}table{width:100%;border-collapse:collapse;font-size:9px}thead{display:table-header-group}th,td{border:1px solid #c6cddd;padding:5px;text-align:center;overflow-wrap:anywhere}th{background:#efe3f6}tr{page-break-inside:avoid}footer{text-align:center;margin-top:16px;font-size:10px}</style></head><body><h1>مبادرة I&#39;m the Princess — الصف السادس</h1><h2>وزارة التعليم | المديرية العامة للتعليم لمحافظة ظفار</h2><p>عدد السجلات: '+prVisible.length+' — المكتملة: '+prVisible.filter(r=>r.done).length+' — تاريخ التقرير: '+hx(new Date().toLocaleString("ar-OM"))+'</p><table><thead><tr>'+heads.map(h=>"<th>"+hx(h)+"</th>").join("")+'</tr></thead><tbody>'+trs+'</tbody></table><footer>أ/ سارة النهدي — معلمة اللغة الإنجليزية | مديرة المدرسة أ/ ليلي الحبشي</footer></body></html>';
+ const periodText=pe("prDay").value==="today"?"نتائج اليوم بتوقيت سلطنة عُمان ("+prOmanDay(Date.now())+")":"جميع الأيام";
+ const report='<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>نتائج Princess</title><style>@page{size:A4 landscape;margin:11mm}body{font-family:Tahoma,Arial,sans-serif;color:#1b263e;margin:0}h1,h2{text-align:center;margin:2px 0}h1{font-size:19px;color:#672583}h2{font-size:13px}p{text-align:center;font-size:11px}table{width:100%;border-collapse:collapse;font-size:9px}thead{display:table-header-group}th,td{border:1px solid #c6cddd;padding:5px;text-align:center;overflow-wrap:anywhere}th{background:#efe3f6}tr{page-break-inside:avoid}footer{text-align:center;margin-top:16px;font-size:10px}</style></head><body><h1>مبادرة I&#39;m the Princess — الصف السادس</h1><h2>وزارة التعليم | المديرية العامة للتعليم لمحافظة ظفار</h2><p>عدد السجلات: '+prVisible.length+' — المكتملة: '+prVisible.filter(r=>r.done).length+' — الفترة: '+hx(periodText)+' — تاريخ التقرير: '+hx(new Date().toLocaleString("ar-OM",{timeZone:"Asia/Muscat"}))+'</p><table><thead><tr>'+heads.map(h=>"<th>"+hx(h)+"</th>").join("")+'</tr></thead><tbody>'+trs+'</tbody></table><footer>أ/ سارة النهدي — معلمة اللغة الإنجليزية | مديرة المدرسة أ/ ليلي الحبشي</footer></body></html>';
  const win=window.open("","_blank");
  if(!win){pe("prStatus").textContent="اسمح بالنوافذ المنبثقة لطباعة التقرير";return;}
  win.document.open();win.document.write(report);win.document.close();win.focus();setTimeout(()=>{try{win.print();}catch(e){console.warn(e)}},350);
@@ -896,7 +914,7 @@ document.addEventListener("DOMContentLoaded",()=>{
  pe("prAdminModal").addEventListener("click",e=>{if(e.target===pe("prAdminModal"))prClose();});
  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&pe("prAdminModal").classList.contains("open"))prClose();});
  pe("prRefresh").addEventListener("click",prLoad);
- pe("prSearch").addEventListener("input",prApply);pe("prSchool").addEventListener("change",prApply);pe("prFilter").addEventListener("change",prApply);
+ pe("prSearch").addEventListener("input",prApply);pe("prSchool").addEventListener("change",prApply);pe("prFilter").addEventListener("change",prApply);pe("prDay").addEventListener("change",prApply);
  pe("prPdf").addEventListener("click",prPdf);pe("prCsv").addEventListener("click",prCsv);
 });
 
