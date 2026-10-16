@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-16T18:40:43.251258+00:00",
+  "success": true,
+  "deployedAdmin": true,
+  "legacyCurrentData": true,
+  "filters": true,
+  "csv": true,
+  "pdf": true,
+  "firebaseReadHttp": 200,
+  "firebaseRecordCount": 35,
+  "javascriptErrors": []
+}
