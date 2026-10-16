@@ -1,0 +1,110 @@
+name: Princess Admin Live Verification
+on:
+  push:
+    paths:
+      - '.github/workflows/princess-admin-live.yml'
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Chromium tooling
+        run: |
+          python3 -m pip install --quiet playwright
+          if ! command -v google-chrome >/dev/null 2>&1; then python3 -m playwright install chromium; fi
+      - name: Test hosted competition administrator controls
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, asyncio, datetime, urllib.request, time, shutil, hashlib
+          from playwright.async_api import async_playwright
+          target='https://abdelfttah5.github.io/Princess/'
+          status={'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'success':False}
+          fixture={
+            'legacy1':{'schoolName':'Test School','studentName':'Old Record','level1':10,'level2':9,'level3':8,'total':27,'status':'completed','elapsedMs':180000},
+            'modern2':{'schoolName':'Test School','studentName':'New Record','level1Score':10,'level2Score':10,'level3Score':10,'totalScore':30,'stage':'final','elapsedMs':200000},
+            'partial3':{'schoolName':'School Two','studentName':'Progress Record','level1Score':2,'stage':'level1','totalScore':2,'elapsedMs':30000}
+          }
+          async def test():
+            for i in range(18):
+              with urllib.request.urlopen(target+'?ready='+str(time.time()),timeout=20) as resp: html=resp.read().decode('utf8')
+              if 'id="prAdminModal"' in html and 'PR_KEY_HASH' in html:
+                status['deployedAdmin']=True
+                break
+              await asyncio.sleep(12)
+            else:raise RuntimeError('Published site has not yet updated to admin commit')
+            async with async_playwright() as p:
+              chrome=shutil.which('google-chrome') or shutil.which('chromium')
+              browser=await p.chromium.launch(executable_path=chrome if chrome else None,headless=True,args=['--no-sandbox'])
+              ctx=await browser.new_context(accept_downloads=True)
+              page=await ctx.new_page()
+              errors=[]
+              page.on('pageerror',lambda e:errors.append(str(e)))
+              async def mock_get(route):
+                await route.fulfill(status=200,content_type='application/json',body=json.dumps(fixture))
+              await page.route('**/princessCompetition/results.json',mock_get)
+              await page.goto(target+'?admin_test='+str(time.time()),wait_until='domcontentloaded',timeout=40000)
+              await page.click('#btnPrincessAdmin')
+              await page.fill('#prPass','wrong')
+              await page.click('#prSubmit')
+              assert 'غير صحيحة' in await page.locator('#prLoginError').inner_text(), 'Wrong password not rejected'
+              await page.fill('#prPass','Ahmed@55')
+              await page.click('#prSubmit')
+              await page.wait_for_function('prLoaded',timeout=15000)
+              assert await page.locator('#prTotal').inner_text()=='3'
+              assert await page.locator('#prComplete').inner_text()=='2'
+              assert await page.locator('#prPerfect').inner_text()=='1'
+              assert await page.locator('#prAverage').inner_text()=='28.5'
+              status['legacyCurrentData']=True
+              await page.select_option('#prFilter','done')
+              assert await page.locator('#prTotal').inner_text()=='2'
+              await page.select_option('#prFilter','all')
+              await page.fill('#prSearch','Old Record')
+              assert await page.locator('#prTotal').inner_text()=='1'
+              await page.fill('#prSearch','')
+              status['filters']=True
+              async with page.expect_download(timeout=15000) as d:
+                await page.click('#prCsv')
+              down=await d.value
+              assert down.suggested_filename.endswith('.csv')
+              status['csv']=True
+              async with page.expect_popup(timeout=15000) as ppopup:
+                await page.click('#prPdf')
+              popup=await ppopup.value
+              await popup.wait_for_load_state('domcontentloaded')
+              assert 'Old Record' in await popup.locator('body').inner_text()
+              data=await popup.pdf(format='A4',landscape=True)
+              assert len(data)>3000
+              status['pdf']=True
+              await popup.close()
+              await page.click('#prExit')
+              assert not await page.locator('#prAdminModal').is_visible()
+              # Actual remote read test: no names or personal records included in report.
+              await page.unroute('**/princessCompetition/results.json',mock_get)
+              response=await ctx.request.get('https://princess-829cd-default-rtdb.europe-west1.firebasedatabase.app/princessCompetition/results.json',timeout=25000)
+              status['firebaseReadHttp']=response.status
+              assert response.status==200
+              data=await response.json()
+              assert isinstance(data,(dict,type(None)))
+              status['firebaseRecordCount']=len(data or {})
+              status['javascriptErrors']=errors[:4]
+              assert not errors,errors
+              status['success']=True
+              await browser.close()
+          try:asyncio.run(test())
+          except Exception as e:status['error']=str(e)[:600]
+          with open('princess-admin-live-report.json','w',encoding='utf8') as f:json.dump(status,f,ensure_ascii=False,indent=2)
+          print('ADMIN LIVE VERIFICATION SUMMARY: ',{k:v for k,v in status.items() if k not in ('at',)})
+          PY
+      - name: Commit summarized test report
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add princess-admin-live-report.json
+          git commit -m "Record Princess admin live verification [skip ci]" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
