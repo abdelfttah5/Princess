@@ -1,0 +1,116 @@
+name: Princess Full Live End-to-End Test
+on:
+  push:
+    paths:
+      - '.github/workflows/princess-live-e2e.yml'
+permissions:
+  contents: write
+jobs:
+  browser-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install browser test runtime
+        run: |
+          python3 -m pip install --quiet playwright
+          if ! command -v google-chrome >/dev/null 2>&1; then python3 -m playwright install chromium; fi
+      - name: Test published GitHub Pages and real Firebase
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import asyncio, json, urllib.request, urllib.error, uuid, datetime, time, shutil
+          from playwright.async_api import async_playwright
+          page_url='https://abdelfttah5.github.io/Princess/'
+          db='https://princess-829cd-default-rtdb.europe-west1.firebasedatabase.app'
+          unique='E2E_'+uuid.uuid4().hex[:12]
+          status={'testName':unique,'testedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'success':False}
+          firebase_url=None
+          def request(method='GET',data=None):
+              req=urllib.request.Request(firebase_url,method=method,data=json.dumps(data).encode() if data is not None else None,headers={'Content-Type':'application/json'})
+              with urllib.request.urlopen(req,timeout=20) as resp:
+                  return resp.status,json.loads(resp.read().decode())
+          async def run():
+              global firebase_url
+              for i in range(16):
+                  with urllib.request.urlopen(urllib.request.Request(page_url+'?verify_version='+str(time.time()),headers={'Cache-Control':'no-cache'}),timeout=25) as resp:
+                      html=resp.read().decode('utf-8')
+                  if 'Firebase REST HTTP ' in html and 'let firebaseWriteChain = Promise.resolve()' in html:
+                      status['publishedRestVersion']=True
+                      break
+                  await asyncio.sleep(12)
+              else:
+                  raise RuntimeError('Deployed GitHub Pages has not updated to REST version within expected window')
+              async with async_playwright() as p:
+                  executable=shutil.which('google-chrome') or shutil.which('chromium')
+                  browser=await p.chromium.launch(executable_path=executable,headless=True,args=['--no-sandbox']) if executable else await p.chromium.launch(headless=True,args=['--no-sandbox'])
+                  page=await browser.new_page()
+                  errors=[]
+                  page.on('pageerror',lambda e:errors.append(str(e)))
+                  try:
+                      await page.goto(page_url+'?livecheck='+unique,wait_until='domcontentloaded',timeout=45000)
+                      await page.fill('#schoolName','Automated test school')
+                      await page.fill('#studentName',unique)
+                      await page.click('#btnEnter')
+                      await page.wait_for_function("() => document.querySelector('#viewQuiz') && !document.querySelector('#viewQuiz').classList.contains('hidden')",timeout=35000)
+                      key=await page.evaluate("sessionStorage.getItem('princess_firebase_session_key')")
+                      if not key: raise RuntimeError('No session key created on login')
+                      firebase_url=db+'/princessCompetition/results/'+key+'.json'
+                      h,login=request()
+                      status['loginSaved']=h==200 and login.get('studentName')==unique and login.get('stage')=='login'
+                      if not status['loginSaved']: raise RuntimeError('Real login record was not persisted: '+json.dumps(login)[:250])
+                      total=0
+                      for level in range(1,4):
+                          for index in range(10):
+                              q=await page.evaluate('state.currentQuestions[state.qIndex]')
+                              if q['type']=='mcq':
+                                  await page.locator('#choices button').filter(has_text=q['answer']).first.click()
+                              elif q['type']=='type-en':
+                                  await page.locator('#typeInput').fill(q['answer'])
+                                  await page.locator('#btnCheck').click()
+                              else:
+                                  await page.evaluate('(v)=>{document.getElementById("orderOutput").value=v}',q['answer'])
+                                  await page.locator('#btnCheckOrder').click()
+                              await page.locator('#btnNext').click()
+                          result=await page.locator('#lvlResScore').inner_text()
+                          if '10 / 10' not in result: raise RuntimeError('Unexpected level score '+result)
+                          total+=10
+                          await page.locator('#btnContinue').click()
+                      if not await page.locator('#viewFinal').is_visible():
+                          raise RuntimeError('Final result panel not visible')
+                      for i in range(15):
+                          await asyncio.sleep(2)
+                          h,final=request()
+                          if final and final.get('stage')=='final' and final.get('totalScore')==30:
+                              status['finalSaved']=True
+                              break
+                      if not status.get('finalSaved'):
+                          raise RuntimeError('Final Firebase result not verified; latest: '+json.dumps(final)[:300])
+                      if errors: raise RuntimeError('JavaScript errors: '+str(errors[:5]))
+                      status.update(questionsAnswered=30, score=total, javascriptErrors=0, success=True)
+                  finally:
+                      status['pageDiagnostic']= (await page.locator('#firebaseDiagnosticInfo').inner_text())[:400] if await page.locator('#firebaseDiagnosticInfo').count() else None
+                      await browser.close()
+          try: asyncio.run(run())
+          except Exception as e:status['error']=str(e)[:900]
+          finally:
+              if firebase_url:
+                  try:
+                      h,body=request('DELETE')
+                      status['cleanupHttp']=h
+                      if h != 200:status['success']=False
+                  except Exception as e:
+                      status['cleanupError']=str(e)[:400]
+                      status['success']=False
+          with open('princess-live-e2e-result.json','w',encoding='utf-8') as f:json.dump(status,f,indent=2,ensure_ascii=False)
+          print(json.dumps(status,ensure_ascii=False,indent=2))
+          PY
+      - name: Save test report
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add princess-live-e2e-result.json
+          git commit -m "Record Princess live browser E2E outcome [skip ci]" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
