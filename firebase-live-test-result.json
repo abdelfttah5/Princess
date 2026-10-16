@@ -1,0 +1,12 @@
+{
+  "testPath": "princessCompetition/results/__test_a2cfbaa2e94244",
+  "testedAt": "2026-10-16T17:47:58.370784+00:00",
+  "success": true,
+  "writeHttp": 200,
+  "writeResponse": "{\"stage\":\"diagnostic\",\"testOnly\":true,\"value\":\"princess_rtdb_verification\"}",
+  "corsOrigin": "https://abdelfttah5.github.io",
+  "readHttp": 200,
+  "readResponse": "{\"stage\":\"diagnostic\",\"testOnly\":true,\"value\":\"princess_rtdb_verification\"}",
+  "deleteHttp": 200,
+  "deleteResponse": "null"
+}
